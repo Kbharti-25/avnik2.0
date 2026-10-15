@@ -8,37 +8,28 @@ export default {
   theme: {
     extend: {
       colors: {
-        background: '#0B0F19',
-        surface: {
-          DEFAULT: '#111827',
-          50: '#1F2937',
-          100: '#161F30',
-          200: '#1E293B',
-          300: '#334155',
+        brand: {
+          50: '#F0FDF4',
+          100: '#DCFCE7',
+          200: '#BBF7D0',
+          300: '#86EFAC',
+          400: '#4ADE80',
+          500: '#22C55E',
+          600: '#16A34A',
+          700: '#15803D',
+          800: '#166534',
+          900: '#064E3B',
+          950: '#022C22',
         },
-        primary: {
-          DEFAULT: '#38BDF8', // Cyan 400
-          hover: '#0ea5e9',
-          glow: 'rgba(56, 189, 248, 0.15)',
-        },
-        danger: {
-          DEFAULT: '#F43F5E', // Rose 500
-          hover: '#E11D48',
-          glow: 'rgba(244, 63, 94, 0.2)',
-        },
-        warning: {
-          DEFAULT: '#F59E0B', // Amber 500
-          hover: '#D97706',
-          glow: 'rgba(245, 158, 11, 0.2)',
-        },
-        success: {
-          DEFAULT: '#10B981', // Emerald 500
-          hover: '#059669',
-          glow: 'rgba(16, 185, 129, 0.2)',
-        },
-        accent: {
-          purple: '#A855F7',
-          indigo: '#6366F1',
+        emeraldTheme: {
+          DEFAULT: '#059669',
+          hover: '#047857',
+          darkBg: '#091512',
+          darkCard: '#111E1A',
+          darkBorder: '#1A332B',
+          lightBg: '#F8FAF9',
+          lightCard: '#FFFFFF',
+          lightBorder: '#E5E9E7',
         }
       },
       fontFamily: {
@@ -46,9 +37,10 @@ export default {
         mono: ['JetBrains Mono', 'Fira Code', 'Courier New', 'monospace'],
       },
       boxShadow: {
-        'glow-cyan': '0 0 25px -5px rgba(56, 189, 248, 0.3)',
-        'glow-rose': '0 0 25px -5px rgba(244, 63, 94, 0.3)',
-        'glow-emerald': '0 0 25px -5px rgba(16, 185, 129, 0.3)',
+        'soft': '0 2px 10px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.02)',
+        'soft-lg': '0 10px 25px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.025)',
+        'dark-soft': '0 4px 20px rgba(0, 0, 0, 0.4)',
+        'emerald-glow': '0 0 25px -4px rgba(16, 185, 129, 0.25)',
       }
     },
   },

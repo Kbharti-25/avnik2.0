@@ -4,16 +4,16 @@ import {
   ZoomIn, 
   ZoomOut, 
   Maximize2, 
-  RefreshCw, 
-  Filter, 
-  Eye, 
-  Layers, 
+  RotateCw, 
+  SlidersHorizontal, 
+  Search, 
+  Type, 
+  PenTool, 
+  Crosshair, 
   AlertTriangle,
-  Smartphone,
-  Store,
-  FileText,
-  UserCheck
+  ChevronDown
 } from 'lucide-react';
+import { useTheme } from '../context/ThemeContext';
 import { GraphNodeData, GraphEdgeData } from '../types';
 
 interface GraphExplorerProps {
@@ -25,6 +25,14 @@ interface GraphExplorerProps {
   highlightedRingActive: boolean;
   setHighlightedRingActive: (active: boolean) => void;
   searchFilter?: string;
+  setSearchFilter?: (q: string) => void;
+  minRiskScore?: number;
+  minAmount?: number;
+  filterTypes?: { [key: string]: boolean };
+  layoutName?: 'cose' | 'concentric' | 'breadthfirst' | 'circle';
+  onOpenFilters?: () => void;
+  timeRange?: string;
+  setTimeRange?: (tr: string) => void;
 }
 
 export const GraphExplorer: React.FC<GraphExplorerProps> = ({
@@ -36,20 +44,27 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
   highlightedRingActive,
   setHighlightedRingActive,
   searchFilter = '',
+  setSearchFilter,
+  minRiskScore = 0,
+  minAmount = 0,
+  filterTypes = { account: true, device: true, merchant: true, complaint: true },
+  layoutName = 'cose',
+  onOpenFilters,
+  timeRange = 'Last 24 hours',
+  setTimeRange,
 }) => {
+  const { theme } = useTheme();
   const containerRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<Core | null>(null);
-  const [currentLayout, setCurrentLayout] = useState<'cose' | 'concentric' | 'breadthfirst' | 'circle'>('cose');
-  const [filterTypes, setFilterTypes] = useState<{ [key: string]: boolean }>({
-    account: true,
-    device: true,
-    merchant: true,
-    complaint: true,
-  });
+  const [selectedTypeFilter, setSelectedTypeFilter] = useState('ALL');
+  const [showLabels, setShowLabels] = useState(true);
 
-  // Filter elements based on type and frozen state
+  // Filter nodes based on sliders, search, and type
   const visibleNodes = nodes.filter((n) => {
     if (!filterTypes[n.type]) return false;
+    if (selectedTypeFilter !== 'ALL' && n.type !== selectedTypeFilter) return false;
+    if (n.riskScore < minRiskScore) return false;
+
     if (searchFilter.trim()) {
       const q = searchFilter.toLowerCase();
       const matchLabel = n.label.toLowerCase().includes(q);
@@ -64,12 +79,15 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
   const visibleNodeIds = new Set(visibleNodes.map((n) => n.id));
 
   const visibleEdges = edges.filter((e) => {
+    if (e.amount > 0 && e.amount < minAmount) return false;
     return visibleNodeIds.has(e.source) && visibleNodeIds.has(e.target);
   });
 
-  // Initialize Cytoscape
+  // Cytoscape initialization
   useEffect(() => {
     if (!containerRef.current) return;
+
+    const isDark = theme === 'dark';
 
     const cyElements = [
       ...visibleNodes.map((n) => {
@@ -82,8 +100,12 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
             riskScore: n.riskScore,
             isFrozen: isFrozen,
             subText: n.subText,
-            color: getNodeColor(n.type, n.riskScore, isFrozen),
-            borderColor: isFrozen ? '#475569' : n.riskScore > 75 ? '#F43F5E' : '#38BDF8',
+            color: getNodeColor(n.type, n.riskScore, isFrozen, isDark),
+            borderColor: isFrozen 
+              ? (isDark ? '#475569' : '#94A3B8') 
+              : n.riskScore > 75 
+              ? '#E11D48' 
+              : (isDark ? '#10B981' : '#059669'),
           },
         };
       }),
@@ -101,8 +123,12 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
             isSuspicious: e.isSuspicious,
             isSevered: isSevered,
             lineStyle: e.channel === 'DEVICE_BIND' ? 'dashed' : 'solid',
-            lineColor: isSevered ? '#334155' : isMuleEdge ? '#F43F5E' : '#64748B',
-            width: e.amount > 200000 ? 4 : e.amount > 50000 ? 2.5 : 1.5,
+            lineColor: isSevered 
+              ? (isDark ? '#1F332C' : '#CBD5E1') 
+              : isMuleEdge 
+              ? '#E11D48' 
+              : (isDark ? '#3E584F' : '#94A3B8'),
+            width: e.amount > 200000 ? 3.5 : e.amount > 50000 ? 2.5 : 1.5,
           },
         };
       }),
@@ -115,10 +141,11 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
         {
           selector: 'node',
           style: {
-            'label': 'data(label)',
-            'color': '#F8FAFC',
+            'label': showLabels ? 'data(label)' : '',
+            'color': isDark ? '#F8FAFC' : '#0F172A',
             'font-size': '11px',
             'font-family': 'Inter, system-ui, sans-serif',
+            'font-weight': 600,
             'text-valign': 'bottom',
             'text-margin-y': 6,
             'background-color': 'data(color)',
@@ -127,9 +154,9 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
             'width': 36,
             'height': 36,
             'text-outline-width': 2,
-            'text-outline-color': '#0B0F19',
+            'text-outline-color': isDark ? '#0A1210' : '#FFFFFF',
             'transition-property': 'background-color, line-color, target-arrow-color, opacity, border-color',
-            'transition-duration': 0.3,
+            'transition-duration': 0.25,
           },
         },
         {
@@ -159,18 +186,18 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
         {
           selector: 'node:selected',
           style: {
-            'border-width': 4,
-            'border-color': '#38BDF8',
-            'underlay-color': '#38BDF8',
+            'border-width': 3.5,
+            'border-color': isDark ? '#34D399' : '#047857',
+            'underlay-color': isDark ? '#10B981' : '#059669',
             'underlay-padding': 6,
-            'underlay-opacity': 0.35,
+            'underlay-opacity': 0.25,
           } as any,
         },
         {
           selector: 'node[?isFrozen]',
           style: {
             'opacity': 0.35,
-            'background-color': '#334155',
+            'background-color': isDark ? '#1E293B' : '#E2E8F0',
             'border-color': '#64748B',
             'border-style': 'dashed',
           },
@@ -185,11 +212,12 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
             'target-arrow-shape': 'triangle',
             'curve-style': 'bezier',
             'arrow-scale': 1.1,
-            'label': 'data(label)',
+            'label': showLabels ? 'data(label)' : '',
             'font-size': '10px',
-            'color': '#94A3B8',
+            'color': isDark ? '#94A3B8' : '#64748B',
+            'font-weight': 500,
             'text-outline-width': 1.5,
-            'text-outline-color': '#0B0F19',
+            'text-outline-color': isDark ? '#0A1210' : '#FFFFFF',
             'text-rotation': 'autorotate',
           },
         },
@@ -197,8 +225,8 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
           selector: 'edge[?isSevered]',
           style: {
             'opacity': 0.2,
-            'line-color': '#1E293B',
-            'target-arrow-color': '#1E293B',
+            'line-color': '#94A3B8',
+            'target-arrow-color': '#94A3B8',
           },
         },
         {
@@ -209,17 +237,17 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
             'width': 4.5,
             'underlay-color': '#F59E0B',
             'underlay-padding': 4,
-            'underlay-opacity': 0.4,
+            'underlay-opacity': 0.35,
           } as any,
         },
         {
           selector: '.dimmed',
           style: {
-            'opacity': 0.2,
+            'opacity': 0.15,
           },
         },
       ],
-      layout: getLayoutConfig(currentLayout),
+      layout: getLayoutConfig(layoutName),
     });
 
     cy.on('tap', 'node', (evt: EventObject) => {
@@ -240,15 +268,21 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
     return () => {
       cy.destroy();
     };
-  }, [visibleNodes.length, visibleEdges.length, currentLayout, frozenNodeIds]);
+  }, [
+    visibleNodes.length, 
+    visibleEdges.length, 
+    layoutName, 
+    frozenNodeIds, 
+    theme, 
+    showLabels
+  ]);
 
-  // Handle ring highlight
+  // Spotlight ring effect
   useEffect(() => {
     if (!cyRef.current) return;
     const cy = cyRef.current;
 
     if (highlightedRingActive) {
-      // Focus on the Chakravyuh mule ring nodes and edges
       const ringNodeIds = [
         'ACC_VICTIM_1',
         'ACC_PRIMARY_MULE',
@@ -259,9 +293,7 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
         'MERCH_CASHOUT',
       ];
       cy.elements().addClass('dimmed');
-      ringNodeIds.forEach((id) => {
-        cy.getElementById(id).removeClass('dimmed');
-      });
+      ringNodeIds.forEach((id) => cy.getElementById(id).removeClass('dimmed'));
       cy.edges().forEach((edge) => {
         const src = edge.data('source');
         const tgt = edge.data('target');
@@ -276,20 +308,19 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
     }
   }, [highlightedRingActive]);
 
-  // Helper colors
-  function getNodeColor(type: string, riskScore: number, isFrozen: boolean): string {
-    if (isFrozen) return '#1E293B';
+  function getNodeColor(type: string, riskScore: number, isFrozen: boolean, isDark: boolean): string {
+    if (isFrozen) return isDark ? '#1E293B' : '#E2E8F0';
     if (type === 'device') return '#D97706'; // Amber 600
     if (type === 'merchant') return '#7C3AED'; // Violet 600
     if (type === 'complaint') return '#DC2626'; // Red 600
     // Account:
     if (riskScore > 85) return '#E11D48'; // Rose / Crimson
     if (riskScore > 50) return '#EA580C'; // Orange
-    return '#0284C7'; // Blue / Cyan
+    return isDark ? '#059669' : '#10B981'; // Eye-soothing emerald
   }
 
-  function getLayoutConfig(layoutName: string) {
-    if (layoutName === 'cose') {
+  function getLayoutConfig(lName: string) {
+    if (lName === 'cose') {
       return {
         name: 'cose',
         idealEdgeLength: 120,
@@ -309,153 +340,196 @@ export const GraphExplorer: React.FC<GraphExplorerProps> = ({
         minTemp: 1.0,
       };
     }
-    return { name: layoutName, fit: true, padding: 50 };
+    return { name: lName, fit: true, padding: 50 };
   }
 
   const handleZoomIn = () => cyRef.current?.zoom(cyRef.current.zoom() * 1.25);
   const handleZoomOut = () => cyRef.current?.zoom(cyRef.current.zoom() * 0.8);
   const handleFit = () => cyRef.current?.fit(undefined, 50);
-  const handleCenter = () => cyRef.current?.center();
+  const handleReset = () => {
+    cyRef.current?.reset();
+    cyRef.current?.fit(undefined, 50);
+  };
 
   return (
-    <div className="relative w-full h-[calc(100vh-140px)] bg-[#0B0F19] rounded-2xl border border-slate-800 overflow-hidden flex flex-col shadow-2xl">
-      {/* Canvas Toolset Header */}
-      <div className="absolute top-4 left-4 z-10 flex flex-wrap items-center gap-2 bg-slate-900/90 backdrop-blur-md p-1.5 rounded-xl border border-slate-800 shadow-xl">
-        {/* Layout Switcher */}
-        <div className="flex items-center gap-1 px-2 border-r border-slate-800">
-          <span className="text-[11px] font-medium text-slate-400">Layout:</span>
-          {(['cose', 'concentric', 'breadthfirst', 'circle'] as const).map((l) => (
-            <button
-              key={l}
-              onClick={() => setCurrentLayout(l)}
-              className={`px-2 py-1 rounded text-[11px] font-medium capitalize transition-all ${
-                currentLayout === l
-                  ? 'bg-cyan-500 text-slate-950 font-bold'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+    <div
+      className={`rounded-2xl border transition-all h-[560px] flex flex-col relative overflow-hidden ${
+        theme === 'dark'
+          ? 'bg-[#111E1A] border-[#1A332B]'
+          : 'bg-white border-slate-200/90 shadow-sm'
+      }`}
+    >
+      {/* Top Card Header */}
+      <div className="p-4 border-b border-inherit flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <h3
+              className={`text-sm font-bold tracking-tight ${
+                theme === 'dark' ? 'text-white' : 'text-slate-900'
               }`}
             >
-              {l === 'cose' ? 'Force' : l}
-            </button>
-          ))}
+              Network graph
+            </h3>
+            <span
+              className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                theme === 'dark'
+                  ? 'bg-[#1A312A] text-emerald-300'
+                  : 'bg-slate-100 text-slate-600'
+              }`}
+            >
+              {visibleNodes.length} entities
+            </span>
+          </div>
+          <p className="text-[11px] text-slate-400 mt-0.5">
+            Connected activity across complaints, accounts, and devices
+          </p>
         </div>
 
-        {/* Highlight Mule Ring Toggle */}
+        {/* Reload button */}
         <button
-          onClick={() => setHighlightedRingActive(!highlightedRingActive)}
-          className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
-            highlightedRingActive
-              ? 'bg-amber-500 text-slate-950 ring-2 ring-amber-400/50'
-              : 'bg-slate-800 text-amber-400 hover:bg-slate-700 border border-amber-500/30'
-          }`}
+          onClick={handleReset}
+          title="Reset graph layout"
+          className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 transition-colors self-start sm:self-center btn-press"
         >
-          <AlertTriangle className="w-3.5 h-3.5" />
-          <span>{highlightedRingActive ? 'Reset Spotlight' : 'Spotlight Ring'}</span>
+          <RotateCw className="w-4 h-4" />
         </button>
+      </div>
 
-        {/* Canvas Zoom controls */}
-        <div className="flex items-center gap-1 pl-1">
+      {/* Filter & Search Toolbar */}
+      <div
+        className={`px-4 py-2.5 border-b border-inherit flex flex-wrap items-center justify-between gap-3 ${
+          theme === 'dark' ? 'bg-[#0E1815]' : 'bg-[#FAFCFB]'
+        }`}
+      >
+        {/* Search input */}
+        <div className="relative flex-1 min-w-[180px] max-w-xs">
+          <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Find an entity..."
+            value={searchFilter}
+            onChange={(e) => setSearchFilter && setSearchFilter(e.target.value)}
+            className={`w-full pl-8 pr-3 py-1.5 text-xs rounded-xl border focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all ${
+              theme === 'dark'
+                ? 'bg-[#142320] border-[#1E3B33] text-slate-200 placeholder-slate-500'
+                : 'bg-white border-slate-200 text-slate-800 placeholder-slate-400'
+            }`}
+          />
+        </div>
+
+        {/* Dropdowns & Filters Button */}
+        <div className="flex items-center gap-2">
+          {/* Entity Type Select */}
+          <select
+            value={selectedTypeFilter}
+            onChange={(e) => setSelectedTypeFilter(e.target.value)}
+            className={`px-2.5 py-1.5 text-xs rounded-xl border focus:outline-none cursor-pointer ${
+              theme === 'dark'
+                ? 'bg-[#142320] border-[#1E3B33] text-slate-300'
+                : 'bg-white border-slate-200 text-slate-700'
+            }`}
+          >
+            <option value="ALL">All entity types</option>
+            <option value="account">Accounts only</option>
+            <option value="device">Devices only</option>
+            <option value="merchant">Merchants only</option>
+            <option value="complaint">Complaints only</option>
+          </select>
+
+          {/* Time Window Select */}
+          <select
+            value={timeRange}
+            onChange={(e) => setTimeRange && setTimeRange(e.target.value)}
+            className={`px-2.5 py-1.5 text-xs rounded-xl border focus:outline-none cursor-pointer ${
+              theme === 'dark'
+                ? 'bg-[#142320] border-[#1E3B33] text-slate-300'
+                : 'bg-white border-slate-200 text-slate-700'
+            }`}
+          >
+            <option value="Last 24 hours">Last 24 hours</option>
+            <option value="Last 7 days">Last 7 days</option>
+            <option value="All time">All time</option>
+          </select>
+
+          {/* Open Filters Slidebar */}
+          <button
+            onClick={onOpenFilters}
+            title="Open threshold slidebars"
+            className={`p-2 rounded-xl border transition-all btn-press ${
+              theme === 'dark'
+                ? 'bg-[#142320] border-[#1E3B33] text-slate-300 hover:text-white'
+                : 'bg-white border-slate-200 text-slate-600 hover:text-slate-900 shadow-xs'
+            }`}
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+
+      {/* Main Canvas Area */}
+      <div className="relative flex-1 dot-grid overflow-hidden">
+        {/* Status indicator top left */}
+        <div className="absolute top-3 left-4 z-10 flex items-center gap-2 text-[11px] font-medium text-slate-400 bg-white/70 dark:bg-black/50 px-2.5 py-1 rounded-full backdrop-blur-xs border border-slate-200/60 dark:border-slate-800">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+          <span>Investigation network • 15 Oct 2026</span>
+        </div>
+
+        {/* Cytoscape Container */}
+        <div ref={containerRef} className="w-full h-full" />
+
+        {/* Floating Bottom Toolbar */}
+        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1.5 px-3 py-1.5 rounded-full backdrop-blur-md border shadow-lg transition-all bg-white/90 dark:bg-[#121F1B]/90 border-slate-200 dark:border-[#1E3B33]">
+          <button
+            onClick={handleFit}
+            title="Fit to screen"
+            className="p-1.5 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition-colors btn-press"
+          >
+            <Maximize2 className="w-3.5 h-3.5" />
+          </button>
+
+          <button
+            onClick={() => setShowLabels(!showLabels)}
+            title={showLabels ? 'Hide labels' : 'Show labels'}
+            className={`p-1.5 rounded-full transition-colors btn-press ${
+              showLabels
+                ? 'text-emerald-700 dark:text-emerald-400'
+                : 'text-slate-400 hover:text-slate-700 dark:hover:text-slate-200'
+            }`}
+          >
+            <Type className="w-3.5 h-3.5" />
+          </button>
+
+          <div className="w-px h-4 bg-slate-200 dark:bg-slate-700" />
+
+          {/* Spotlight Mule Ring */}
+          <button
+            onClick={() => setHighlightedRingActive(!highlightedRingActive)}
+            title="Spotlight suspicious ring"
+            className={`px-2.5 py-1 rounded-full text-[11px] font-semibold flex items-center gap-1 transition-all btn-press ${
+              highlightedRingActive
+                ? 'bg-amber-500 text-slate-950 font-bold'
+                : 'text-slate-500 dark:text-slate-300 hover:text-amber-500'
+            }`}
+          >
+            <AlertTriangle className="w-3 h-3" />
+            <span>Spotlight</span>
+          </button>
+
           <button
             onClick={handleZoomIn}
             title="Zoom In"
-            className="p-1.5 rounded hover:bg-slate-800 text-slate-300 hover:text-white"
+            className="p-1.5 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition-colors btn-press"
           >
-            <ZoomIn className="w-4 h-4" />
+            <ZoomIn className="w-3.5 h-3.5" />
           </button>
+
           <button
             onClick={handleZoomOut}
             title="Zoom Out"
-            className="p-1.5 rounded hover:bg-slate-800 text-slate-300 hover:text-white"
+            className="p-1.5 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 transition-colors btn-press"
           >
-            <ZoomOut className="w-4 h-4" />
+            <ZoomOut className="w-3.5 h-3.5" />
           </button>
-          <button
-            onClick={handleFit}
-            title="Fit to Screen"
-            className="p-1.5 rounded hover:bg-slate-800 text-slate-300 hover:text-white"
-          >
-            <Maximize2 className="w-4 h-4" />
-          </button>
-          <button
-            onClick={handleCenter}
-            title="Center Canvas"
-            className="p-1.5 rounded hover:bg-slate-800 text-slate-300 hover:text-white"
-          >
-            <RefreshCw className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      </div>
-
-      {/* Type Filter Pills (Top Right) */}
-      <div className="absolute top-4 right-4 z-10 flex items-center gap-2 bg-slate-900/90 backdrop-blur-md p-1.5 rounded-xl border border-slate-800 shadow-xl">
-        <Filter className="w-3.5 h-3.5 text-slate-500 ml-1.5" />
-        <span className="text-[11px] text-slate-400 font-medium mr-1">Filter:</span>
-
-        <button
-          onClick={() => setFilterTypes((prev) => ({ ...prev, account: !prev.account }))}
-          className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs transition-all ${
-            filterTypes.account ? 'bg-cyan-950 text-cyan-300 border border-cyan-800/60' : 'bg-slate-800 text-slate-500'
-          }`}
-        >
-          <UserCheck className="w-3 h-3" />
-          <span>Accounts</span>
-        </button>
-
-        <button
-          onClick={() => setFilterTypes((prev) => ({ ...prev, device: !prev.device }))}
-          className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs transition-all ${
-            filterTypes.device ? 'bg-amber-950 text-amber-300 border border-amber-800/60' : 'bg-slate-800 text-slate-500'
-          }`}
-        >
-          <Smartphone className="w-3 h-3" />
-          <span>Devices</span>
-        </button>
-
-        <button
-          onClick={() => setFilterTypes((prev) => ({ ...prev, merchant: !prev.merchant }))}
-          className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs transition-all ${
-            filterTypes.merchant ? 'bg-purple-950 text-purple-300 border border-purple-800/60' : 'bg-slate-800 text-slate-500'
-          }`}
-        >
-          <Store className="w-3 h-3" />
-          <span>Merchants</span>
-        </button>
-
-        <button
-          onClick={() => setFilterTypes((prev) => ({ ...prev, complaint: !prev.complaint }))}
-          className={`flex items-center gap-1 px-2.5 py-1 rounded text-xs transition-all ${
-            filterTypes.complaint ? 'bg-rose-950 text-rose-300 border border-rose-800/60' : 'bg-slate-800 text-slate-500'
-          }`}
-        >
-          <FileText className="w-3 h-3" />
-          <span>Complaints</span>
-        </button>
-      </div>
-
-      {/* Main Cytoscape Container */}
-      <div ref={containerRef} className="cytoscape-container flex-1" />
-
-      {/* Graph Legend & Status footer */}
-      <div className="absolute bottom-4 left-4 z-10 flex items-center gap-4 bg-slate-900/80 backdrop-blur-md px-3.5 py-2 rounded-xl border border-slate-800/80 text-xs text-slate-300 shadow-xl">
-        <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Legend:</span>
-        <div className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shadow-sm shadow-rose-500/50" />
-          <span>High-Risk Mule (Score &gt; 85)</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full bg-cyan-500" />
-          <span>Legitimate / Low-Risk</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rotate-45 bg-amber-500" />
-          <span>Device / Hardware IMEI</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded bg-purple-500" />
-          <span>Cashout Merchant</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <span className="w-2.5 h-2.5 rounded-full border border-dashed border-slate-400 bg-slate-700" />
-          <span>Counterfactual Frozen</span>
         </div>
       </div>
     </div>
